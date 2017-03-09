@@ -1,0 +1,128 @@
+whether or not violations correlate with accidents
+most typical accidents: industry (OCC), source of accident (source, environ, human)
+
+
+
+OSHA - Occupational Safety and Heath Administration
+Priorities: Imminent danger (causes death/serious harm), Catastrophes/Fatal accidents (3+ employees death of hospitilization), Complaints/Referrals (employee complaints of unsafe conditions), Programmed Inspections (OSHA selects industries based on injury rates, citation history, toxic substance exposure, random)
+
+Violations: OtherThanSerious (will not cause death/serious harm but unsafe), Serious (big prob. of serious harm), Willful (employer knows violation, hazardous condition), Repeated (similar violation w re-inspection), FailureToABate (not correcting prior violation)
+
+1. Each variable forms a column.
+2. Each observation forms a row.
+3. Each type of observational unit forms a table.
+
+FILES INCLUDED:
+	
+	Osha.dbf - main table with company name, address, date of inspection, etc. 
+		If you get the entire country, there's a number after the 
+		word OSHA, since it's too big to put on one CD. (not necessary)
+	Viol.dbf - violations from each inspection. If you get the entire 
+		country, there's a number after the word VIOL, since it's 
+		too big to put on one CD. (yes)
+	Accid.dbf - details about accident victims (yes)
+	Hazsub.dbf - hazardous substances involved (yes)
+	Debt.dbf - status of debt (not necessary)
+	History.dbf - outlines a history of any changes in penalty (not neccesary)
+	Admpay.dbf - a record of collecting administrative fees or penalties (not neccesary)
+	Prog.dbf - special programs the inspection might be involved in (potentially useful)
+	Relact.dbf - whether the inspection is related to another inspection or other action (useful, if inspection is related to other action, can see whether it has been fixed)
+	Optinfo.dbf - optional information
+
+Accidents-
+Activity No (Leave, identifies situation)
+Site State (All MA, not necessary)
+Name (Probably not necessary)
+Relinsp (Ins ID Number, not necessary)
+Sex (Could be interesting to see link between sex & dangers, keep)
+Degree (keep 1 = fatality
+							2 = hospitalized injury
+							3 = non-hospitalized injury)
+Nature (use lookup, nature of injury)
+BodyPart (use lookup)
+Source (use lookup)
+Event (use lookup)
+Environment (use lookup, env contributing factor)
+Human (use lookkup, human error)
+Task 1 = regularly assigned task 
+							2 = task other than regularly assigned
+Hazsub (hazsub.dbf)
+Occ Code (occ.dbf)
+Age (keep)
+
+Violations- 
+Activity No
+Site State
+Delete - for ones with x, need to delete these entries
+Issuance
+Citation
+Item No
+Item Group
+Emphasis - more importnat
+Gravity - 1-10 level
+Pencurrent - $ OSHA will collect, probably not important
+Peninitial - $ OSHA initial estimate, probably not important
+Viol Type - O = other
+						R = repeat
+						S = serious
+						U = unclassified
+						W = willful
+Viol Type A - initial assesment violation
+STD - Federal or state standard cited - use subset(std, STATE == "MA"), determine none
+Abate 
+Instances -	Number of instances of violation of standard related event
+Rec- related event code
+						A = FAT/CAT (fatality/catastrophe), accident
+						B = 
+						C = complaint
+						D = 
+						F = 
+						I = imminent danger
+						R = related event code
+						S =
+						V = variance
+Num Exposed - # employees affected
+Abate Done - Maybe can see if companies care about violations and have done abatement?
+            X = abatement, PPE, report completed
+						E = abatement, PPE, plan, report not completed,
+							employer out of business
+						W = abatement, PPE, plan, report not completed,
+							worksite changed
+						S = abatement, PPE, plan, report not complete, ad
+							discretion
+						N = national indicator (older files)
+						I = abatement completed immediately upon receipt of
+							citation
+						Q = quick fix (fixed during the walkaround)
+						A = abatement, PPE, plan, report not completed, ad
+							Discretion
+
+Er Cont Dt
+Viol Cont
+Pen Cont
+Emprcont
+empecont
+Finordt
+PMA
+Amended
+ISA
+Dispevt
+Ftainsp
+Ftapen
+Issudt
+Condt
+Fta Amn
+FTA Isa
+FTA Disp
+HazCat
+AbateDt
+Issue Date
+Date abate
+abate dt 2
+ercondate
+finordate
+fta isdt
+contdate
+ftafindt
+fta fin
+std lookup
