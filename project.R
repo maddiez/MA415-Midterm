@@ -1,34 +1,74 @@
-library(foreign)
-library(dplyr)
-library(data.table)
-library(plyr)
-library(ggplot2)
 v <- read.dbf("viol.DBF")
-aFac <- read.dbf("lookups/acc.dbf")
 admpay <- read.dbf("admpay.DBF")
 hzs <- read.dbf("lookups/hzs.dbf")
-occ <- read.dbf("lookups/occ.dbf")
-#osha <- read.dbf("debt.dbf")
 history <- read.dbf("history.dbf")
 nep <- read.dbf("lookups/neptable.dbf")
 relact <- read.dbf("relact.dbf")
 std <- read.dbf("lookups/std.dbf")
 fda <- read.dbf("lookups/fda.dbf")
 
-#mode function
-#getmode <- function(v) {
-#  uniqv <- unique(v)
-# uniqv[which.max(tabulate(match(v, uniqv)))]}
 
+
+
+
+
+library(foreign)
+library(dplyr)
+library(data.table)
+library(plyr)
+library(ggplot2)
+
+occ <- read.dbf("lookups/occ.dbf")
 a <- read.dbf("accid.DBF")
+aFac <- read.dbf("lookups/acc.dbf")
+
 #Remove state (because all MA), Name (not relevent for data analysis), and RELINSP (doesn't help identify, already have activity no)
-a <- a %>% select(-c(SITESTATE, NAME, RELINSP) )  
-#What kind of occupations?
+a <- a %>% select(-c(SITESTATE, NAME, RELINSP, AGE, SEX) )  
+
+#Create Degree corresponding codes
+Deg <- c("Non - Hospital Injuries", "Hospital Injuries", "Fatalities")
+DEGREE <- c("3", "2", "1")
+DegDatabase <- data.frame(Deg, DEGREE)
+
+#replace degree codes with actual injuries
+a <- left_join(a, DegDatabase, by="DEGREE")
+
+#repeat replacements for other cols with codes into lookups
+aFac_Nat <- aFac[grep("NATU", aFac$CATEGORY, invert = FALSE),]
+aFac_Nat <- setNames(aFac_Nat, c("CATEGORY","NATURE","Nature"))
+a <- left_join(a, aFac_Nat, by="NATURE")
+
+aFac_Body <- aFac[grep("BODY", aFac$CATEGORY, invert = FALSE),]
+aFac_Body <- setNames(aFac_Body, c("CATEGORY","BODYPART","Body Part"))
+a <- left_join(a, aFac_Body, by="BODYPART")
+
+aFac_Source <- aFac[grep("SOUR", aFac$CATEGORY, invert = FALSE),]
+aFac_Source <- setNames(aFac_Source, c("CATEGORY","SOURCE","Source"))
+a <- left_join(a, aFac_Source, by="SOURCE")
+
+aFac_Event <- aFac[grep("EVENT", aFac$CATEGORY, invert = FALSE),]
+aFac_Event <- setNames(aFac_Event, c("CATEGORY","EVENT","Event"))
+a <- left_join(a, aFac_Event, by="EVENT")
+
+aFac_Env <- aFac[grep("ENVIR", aFac$CATEGORY, invert = FALSE),]
+aFac_Env <- setNames(aFac_Env, c("CATEGORY","ENVIRON","Enviro"))
+a <- left_join(a, aFac_Env, by="ENVIRON")
+
+aFac_Human <- aFac[grep("HUMAN", aFac$CATEGORY, invert = FALSE),]
+aFac_Human <- setNames(aFac_Human, c("CATEGORY","HUMAN","Human"))
+a <- left_join(a, aFac_Human, by="HUMAN")
+
+aFac_Task <- aFac[grep("TASK", aFac$CATEGORY, invert = FALSE),]
+aFac_Task <- setNames(aFac_Task, c("CATEGORY","TASK","Task"))
+a <- left_join(a, aFac_Task, by="TASK")
+
+#Clean up extra columns 
+a <- a %>% select(-c(BODYPART, CATEGORY.x, CATEGORY.x.x, CATEGORY.x.x.x, CATEGORY.y, CATEGORY.y.y, CATEGORY.y.y.y, NATURE, DEGREE, SOURCE, EVENT, ENVIRON, HUMAN, TASK, HAZSUB) )  
+
 a$OCC_CODE <- as.numeric(as.character(a$OCC_CODE))
 
 #create subset of only accidents filed w occupation code
 a_occupations <- subset(a, OCC_CODE > 000 & OCC_CODE <999)
-a_occupations <- a_occupations %>% select(-c(SEX, SOURCE, AGE, ENVIRON, HUMAN, HAZSUB, TASK, EVENT, BODYPART, NATURE) )  
 occ$CODE <- as.numeric(as.character(occ$CODE))
 
 Occupation <- c("Transportation and Material Moving")
@@ -114,111 +154,49 @@ Occ11 <- data.frame(OCC_CODE, Occupation)
 OccDatabase <- rbind(Occ19, Occ37, Occ11, Occ13, Occ44, Occ17, Occ29, Occ21, Occ27, Occ41, Occ39, Occ35, Occ43, Occ53, Occ51, Occ49, Occ47, Occ45, Occ31)
 a_occupations <- left_join(a_occupations, OccDatabase, by="OCC_CODE")
 
-Deg <- c("Non - Hospital Injuries", "Hospital Injuries", "Fatalities")
-DEGREE <- c("3", "2", "1")
-DegDatabase <- data.frame(Deg, DEGREE)
-a_occupations <- left_join(a_occupations, DegDatabase, by="DEGREE")
+#Choose only Occupation and degree
+occ_with_deg <- a_occupations %>% select(c(Occupation, Deg) ) 
+
+#Use plyr count function
+occ_with_deg  <- count_(occ_with_deg , c('Occupation', 'Deg'))
+
+#Reorder with descending counts
+occ_with_deg <-  occ_with_deg [with(occ_with_deg , order(-n)), ]
+occ_with_deg <- setnames(occ_with_deg, "Deg", "Degree")
+occ_with_deg <- setnames(occ_with_deg, "n", "Occurances")
 
 
+library(knitr)
+kable(occ_with_deg, caption = "The number of occurances for degrees of injuries in each Occupation")
 a_occupations$Deg <- factor(a_occupations$Deg, levels = c("Non - Hospital Injuries", "Hospital Injuries", "Fatalities"))
 
-ggplot(data = a_occupations, aes(x = Occupation, fill = factor(Deg))) + 
-  geom_bar() + coord_flip() + scale_fill_brewer(palette = 12) + labs(fill = "Degree of Injury")
-
-p <- ggplot(NULL, aes(Occupation)) +   
-  geom_bar(aes(fill = "Non - Hospital Injuries"), data = a_nohosp, alpha = 0.5) + 
-  geom_bar(aes(fill = "Hospital Injuries"), data = a_hospinj, alpha = 0.5) + 
-  geom_bar(aes(fill = "Fatalities"), data = a_fatality, alpha = 0.5)
-p + theme(legend.position="top")+theme(axis.text.x = element_text(size=10,angle = 60, hjust = 0.5)) + coord_flip() + scale_fill_brewer(palette = 1) 
-+ scale_x_discrete(labels = c("Architecture and Engineering" = "Arch/Eng", "Building and Grounds Cleaning and Maintenance" = "Building Maint.", "Construction and Extraction" = "Construc./Extrac.", "Farming, Fishing, and Forestry" = "Farm/Fish/Fores.", "Food Preparation and Serving Related" = "Food Prep/Serv.", "Installation, Maintenance, and Repair" = "Install./Repair", "Management" = "Mgmt.", "Office and Administrative Support"="Admin. Supp.", "Production" = "Prod.", "Sales" = "Sales", "Transportation and Material Moving" = "Transpo."))
+p = ggplot(data = a_occupations, aes(x = Occupation, fill = factor(Deg))) 
+p + geom_bar() + coord_flip() + scale_fill_brewer(palette = 2) + labs(fill = "Degree of Injury") + theme(legend.justification=c(1,0), legend.position=c(1,0)) +ggtitle("Occupations Accident Occurances") 
 
 
+osha <- read.dbf("osha.DBF")
+
+sic <- read.dbf("lookups/sic.dbf")
+naics <- read.dbf("lookups/naics.dbf")
+
+cleanosha <- osha %>% select(c(SIC, TOTALVIOLS, INSPTYPE))
+cleanosha <- left_join(cleanosha, sic, by="SIC")
+cleanosha <- cleanosha %>% select(-c(SIC))
+
+cleanosha$INSPTYPE <- as.character(cleanosha$INSPTYPE)
+
+cleanosha <- subset(cleanosha, TOTALVIOLS > 0)
+fatcat <- filter(cleanosha, INSPTYPE == "A")
+complaint <- filter(cleanosha, INSPTYPE == "B")
+
+fatcat <- ddply(fatcat,"INDUSTRY",numcolwise(sum))
+complaint <- ddply(complaint,"INDUSTRY",numcolwise(sum))
+fatcat <-  fatcat [with(fatcat , order(-TOTALVIOLS)), ]
+complaint <-  complaint [with(complaint , order(-TOTALVIOLS)), ]
+fatcat <- setNames(fatcat, c("Industry","Total Violations"))
+complaint <- setNames(complaint, c("Industry","Total Violations"))
 
 
-
-
-
-a_fatality <- subset(a_occupations, DEGREE == 1)
-a_hospinj <- subset(a_occupations, DEGREE == 2)
-a_nohosp <- subset(a_occupations, DEGREE == 3)
-p <- ggplot(NULL, aes(Occupation)) +   
-  geom_bar(aes(fill = "Non - Hospital Injuries"), data = a_nohosp, alpha = 0.5) + 
-  geom_bar(aes(fill = "Hospital Injuries"), data = a_hospinj, alpha = 0.5) + 
-  geom_bar(aes(fill = "Fatalities"), data = a_fatality, alpha = 0.5)
-p + theme(legend.position="top")+theme(axis.text.x = element_text(size=10,angle = 60, hjust = 0.5)) + coord_flip() + scale_fill_brewer(palette = 1) 
-  + scale_x_discrete(labels = c("Architecture and Engineering" = "Arch/Eng", "Building and Grounds Cleaning and Maintenance" = "Building Maint.", "Construction and Extraction" = "Construc./Extrac.", "Farming, Fishing, and Forestry" = "Farm/Fish/Fores.", "Food Preparation and Serving Related" = "Food Prep/Serv.", "Installation, Maintenance, and Repair" = "Install./Repair", "Management" = "Mgmt.", "Office and Administrative Support"="Admin. Supp.", "Production" = "Prod.", "Sales" = "Sales", "Transportation and Material Moving" = "Transpo."))
-
-d <- rbind(a_fatality, a_hospinj, a_nohosp)
-p <- ggplot(d, aes(Occupation, fill=name)) + geom_bar(position = "dodge")
-p + theme(legend.position="top")+theme(axis.text.x = element_text(size=10,angle = 60, hjust = 0.5))+ scale_x_discrete(labels = c("Architecture and Engineering" = "Arch/Eng", "Building and Grounds Cleaning and Maintenance" = "Building Maint.", "Construction and Extraction" = "Construc./Extrac.", "Farming, Fishing, and Forestry" = "Farm/Fish/Fores.", "Food Preparation and Serving Related" = "Food Prep/Serv.", "Installation, Maintenance, and Repair" = "Install./Repair", "Management" = "Mgmt.", "Office and Administrative Support"="Admin. Supp.", "Production" = "Prod.", "Sales" = "Sales", "Transportation and Material Moving" = "Transpo."))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#age?
-a$AGE <- as.numeric(as.character(a$AGE))
-a_age <- subset(a, AGE > 0)
-
-### PLOTTING
-#compare degree 1 = fatality:
-a_fatality <- subset(a, DEGREE == 1)
-#remove all entries with 43 = "other"
-a_fatality <- a_fatality[grep("43", aFac$CATEGORY, invert = TRUE),]
-#prep accident factors for only source optons
-aFac_Source <- aFac[grep("SOUR", aFac$CATEGORY, invert = FALSE),]
-#for mode
-getmode(a_fatality$SOURCE)
-plot(a_fatality$SOURCE)
-########find way to put in corresponding source
-
-#look at degree 2 = hospitalized injury:
-a_hospinj <- subset(a, DEGREE == 2)
-#remove all entries with 43 = "other"
-a_hospinj <- a_hospinj[grep("43", aFac$CATEGORY, invert = TRUE),]
-#for mode
-getmode(a_hospinj$SOURCE)
-plot(a_hospinj$SOURCE)
-
-#look at degree 3 = non hospitalized injury:
-a_nohosp <- subset(a, DEGREE == 3)
-#remove all entries with 43 = "other"
-a_nohosp <- a_nohosp[grep("43", aFac$CATEGORY, invert = TRUE),]
-#for mode
-getmode(a_nohosp$SOURCE)
-plot(a_nohosp$SOURCE)
-
-a_fatality$SOURCE <- as.numeric(as.character(a_fatality$SOURCE))
-a_hospinj$SOURCE <- as.numeric(as.character(a_hospinj$SOURCE))
-a_nohosp$SOURCE <- as.numeric(as.character(a_nohosp$SOURCE))
-
-
-a_fatality$name <- "Fatalities"
-a_hospinj$name <- "Hospital Injuries"
-a_nohosp$name <- "Non-Hospital Injuries"
-
-
-#bar plot
-p <- ggplot(NULL, aes(SOURCE)) + 
-  geom_histogram(binwidth=1,aes(fill = "Fatalities"), data = a_fatality, alpha = 0.5) +
-  geom_histogram(binwidth=1,aes(fill = "Hospital Injuries"), data = a_hospinj, alpha = 0.5) +
-  geom_histogram(binwidth=1,aes(fill = "Non - Hospital Injuries"), data = a_nohosp, alpha = 0.5)
-p + theme(legend.position="top")
-
-
-#side by side plots
-d <- rbind(a_fatality, a_hospinj, a_nohosp)
-p <- ggplot(d, aes(SOURCE, fill=name)) + geom_bar(position = "dodge")
-
-#repeat w human factor
+f1 <- head(fatcat,100)
+c1 <- head(complaint,100)
+x <- left_join(f1,c1, by="Industry")

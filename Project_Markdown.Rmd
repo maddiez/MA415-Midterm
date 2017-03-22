@@ -1,0 +1,303 @@
+---
+title: "OSHA Midterm"
+author: "Madeline Zhang"
+date: "March 19, 2017"
+output: pdf_document
+---
+
+## Brief Introduction
+
+  The Occupational Safety and Heath Administration (OSHA) is a United States governental agency of the Department of Labor. Its mission is to "assure safe and healthful working conditions for working men and women by setting and enforcing standards and by providing training, outreach, education and assistance." By law, workplaces must follow all OSHA safety and health standards. Because of OSHA's role, the organization keeps on file every documented case of a violation or accident that breaks these standards. These files include each OSHA visit to a facility, company information, previous violations, and many other pieces of information. With the data provided by OSHA, I was able to clean, organize and provide graphical solutions to help solve the question of what Massachusetts' most dangerous workplaces are. This report focuses specifically on the correlation between occupation and accidental workplace injuries, and the places that have the most fatalities, catastrophes and complaints of violations. 
+
+```{r}
+# Import necessary libraries and dataframe
+
+library(foreign)
+library(dplyr)
+library(data.table)
+library(plyr)
+library(ggplot2)
+occ <- read.dbf("lookups/occ.dbf")
+a <- read.dbf("accid.DBF")
+aFac <- read.dbf("lookups/acc.dbf")
+
+# Take a look at the accident file
+
+head(a)
+```
+### Cleanup Accident Dataframe
+
+From looking at the accident dataframe, I determined that certain variables can be removed because they add no value to understanding which workplaces are dangerous. The accident file also uses codes to represent the degree of the injury (either fatal, hospitalized, or non-hospitalized), the nature of the accident, the bodypart harmed, and many other categories. I cleaned up the dataframe by using the lookups dataframe with each accident factor listed.
+
+```{r}
+
+# Remove state (because all MA), Name (not relevent for data analysis), and RELINSP (doesn't help identify, already have activity no)
+
+a <- a %>% select(-c(SITESTATE, NAME, RELINSP, AGE, SEX) )  
+
+#Create Degree corresponding codes
+Deg <- c("Non - Hospital Injuries", "Hospital Injuries", "Fatalities")
+DEGREE <- c("3", "2", "1")
+DegDatabase <- data.frame(Deg, DEGREE)
+
+#Replace degree codes with actual injuries using leftjoin
+a <- left_join(a, DegDatabase, by="DEGREE")
+
+#repeat replacements for other cols with codes into lookups
+aFac_Nat <- aFac[grep("NATU", aFac$CATEGORY, invert = FALSE),]
+aFac_Nat <- setNames(aFac_Nat, c("CATEGORY","NATURE","Nature"))
+aFac_Nat <- aFac_Nat %>% select(-c(CATEGORY) )  
+a <- left_join(a, aFac_Nat, by="NATURE")
+
+aFac_Body <- aFac[grep("BODY", aFac$CATEGORY, invert = FALSE),]
+aFac_Body <- setNames(aFac_Body, c("CATEGORY","BODYPART","Body Part"))
+aFac_Body <- aFac_Body %>% select(-c(CATEGORY) )  
+a <- left_join(a, aFac_Body, by="BODYPART")
+
+aFac_Source <- aFac[grep("SOUR", aFac$CATEGORY, invert = FALSE),]
+aFac_Source <- setNames(aFac_Source, c("CATEGORY","SOURCE","Source"))
+aFac_Source <- aFac_Source %>% select(-c(CATEGORY) )  
+a <- left_join(a, aFac_Source, by="SOURCE")
+
+aFac_Event <- aFac[grep("EVENT", aFac$CATEGORY, invert = FALSE),]
+aFac_Event <- setNames(aFac_Event, c("CATEGORY","EVENT","Event"))
+aFac_Event <- aFac_Event %>% select(-c(CATEGORY) )  
+a <- left_join(a, aFac_Event, by="EVENT")
+
+aFac_Env <- aFac[grep("ENVIR", aFac$CATEGORY, invert = FALSE),]
+aFac_Env <- setNames(aFac_Env, c("CATEGORY","ENVIRON","Enviro"))
+aFac_Env <- aFac_Env %>% select(-c(CATEGORY) )  
+a <- left_join(a, aFac_Env, by="ENVIRON")
+
+aFac_Human <- aFac[grep("HUMAN", aFac$CATEGORY, invert = FALSE),]
+aFac_Human <- setNames(aFac_Human, c("CATEGORY","HUMAN","Human"))
+aFac_Human <- aFac_Human %>% select(-c(CATEGORY) )  
+a <- left_join(a, aFac_Human, by="HUMAN")
+
+aFac_Task <- aFac[grep("TASK", aFac$CATEGORY, invert = FALSE),]
+aFac_Task <- setNames(aFac_Task, c("CATEGORY","TASK","Task"))
+aFac_Task <- aFac_Task%>% select(-c(CATEGORY) )  
+a <- left_join(a, aFac_Task, by="TASK")
+
+
+#Clean up extra columns 
+a <- a %>% select(-c( NATURE, DEGREE, SOURCE, EVENT, ENVIRON, HUMAN, TASK, HAZSUB, BODYPART) )  
+
+head(a)
+```
+
+Now, the accidents dataframe makes more sense, and I can directly read from it and extract more details about each accident.
+
+## Add Occupations to Accidents Dataframe
+
+The occupation codes (OCC_CODE) in the accidents dataframe don't really give a great deal of insight as to what they actually are, even when they're corresponded to the lookup values dataframe. I decided to classify occupations based on the BLS Occupation Profiles (https://www.bls.gov/oes/current/oes_stru.htm#00-0000):
+
+```
+11-0000  Management Occupations
+13-0000  Business and Financial Operations Occupations
+15-0000  Computer and Mathematical Occupations
+17-0000  Architecture and Engineering Occupations
+19-0000  Life, Physical, and Social Science Occupations
+21-0000  Community and Social Service Occupations
+23-0000  Legal Occupations
+25-0000  Education, Training, and Library Occupations
+27-0000  Arts, Design, Entertainment, Sports, and Media Occupations
+29-0000  Healthcare Practitioners and Technical Occupations
+31-0000  Healthcare Support Occupations
+33-0000  Protective Service Occupations
+35-0000  Food Preparation and Serving Related Occupations
+37-0000  Building and Grounds Cleaning and Maintenance Occupations
+39-0000  Personal Care and Service Occupations
+41-0000  Sales and Related Occupations
+43-0000  Office and Administrative Support Occupations
+45-0000  Farming, Fishing, and Forestry Occupations
+47-0000  Construction and Extraction Occupations
+49-0000  Installation, Maintenance, and Repair Occupations
+51-0000  Production Occupations
+53-0000  Transportation and Material Moving Occupations
+```
+
+The occupations lookups were already ordered in a very similar way (starting with management, and ending with transportation and material moving occupations), so it was fairly easy to classify the occupations into these subsets. After doing so, I used the joins function again to finalize my accidents dataframe. 
+
+```{r}
+
+#create subset of only accidents filed w occupation code
+a$OCC_CODE <- as.numeric(as.character(a$OCC_CODE))
+a_occupations <- subset(a, OCC_CODE > 000 & OCC_CODE <999)
+occ$CODE <- as.numeric(as.character(occ$CODE))
+
+Occupation <- c("Transportation and Material Moving")
+OCC_CODE <- c(occ[461:502,1])
+Occ53 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Production")
+OCC_CODE <- c(occ[359:460,1])
+Occ51 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Installation, Maintenance, and Repair")
+OCC_CODE <- c(occ[297:323,1], occ[133:154,1])
+Occ49 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Construction and Extraction")
+OCC_CODE <- c(occ[324:358,1])
+Occ47 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Farming, Fishing, and Forestry")
+OCC_CODE <- c(occ[276:296,1])
+Occ45 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Personal Care and Service")
+OCC_CODE <- c(occ[267:276,1])
+Occ39 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Building and Grounds Cleaning and Maintenance")
+OCC_CODE <- c(occ[262:266,1])
+Occ37 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Healthcare Support")
+OCC_CODE <- c(occ[259:262,1])
+Occ31 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Food Preparation and Serving Related")
+OCC_CODE <- c(occ[250:259,1])
+Occ35 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Office and Administrative Support")
+OCC_CODE <- c(occ[239:249,1])
+Occ43 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Office and Administrative Support")
+OCC_CODE <- c(occ[182:233,1])
+Occ44 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Personal Care and Service")
+OCC_CODE <- c(occ[234:239,1])
+Occ39 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Sales")
+OCC_CODE <- c(occ[155:182,1])
+Occ41 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Arts, Design, Entertainment, Sports, and Media")
+OCC_CODE <- c(occ[120:132, 1])
+Occ27 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Community and Social Service")
+OCC_CODE <- c(occ[71:119,1])
+Occ21 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Healthcare Practitioners and Technical")
+OCC_CODE <- c(occ[56:70,1])
+Occ29 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Life, Physical, and Social Science")
+OCC_CODE <- c(occ[41:55,1])
+Occ19 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Architecture and Engineering")
+OCC_CODE <- c(occ[27:40,1])
+Occ17 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Business and Financial Operations")
+OCC_CODE <- c(occ[15:26,1])
+Occ13 <- data.frame(OCC_CODE, Occupation)
+
+Occupation <- c("Management")
+OCC_CODE <- c(occ[1:14,1])
+Occ11 <- data.frame(OCC_CODE, Occupation)
+
+OccDatabase <- rbind(Occ19, Occ37, Occ11, Occ13, Occ44, Occ17, Occ29, Occ21, Occ27, Occ41, Occ39, Occ35, Occ43, Occ53, Occ51, Occ49, Occ47, Occ45, Occ31)
+a_occupations <- left_join(a_occupations, OccDatabase, by="OCC_CODE")
+
+head(a_occupations)
+```
+##Tabular Representation of Occupations and Associated Degrees of Accidental Injuries
+After gathering the data for the accidental injuries, I compiled a table that lists in descending order the number of accidents. It is also categorized into degrees of injury.
+
+```{r}
+
+#Choose only Occupation and degree
+occ_with_deg <- a_occupations %>% select(c(Occupation, Deg) ) 
+
+#Use plyr count function
+occ_with_deg  <- count_(occ_with_deg , c('Occupation', 'Deg'))
+
+#Reorder with descending counts
+occ_with_deg <-  occ_with_deg [with(occ_with_deg , order(-n)), ]
+occ_with_deg <- setnames(occ_with_deg, "Deg", "Degree")
+occ_with_deg <- setnames(occ_with_deg, "n", "Occurances")
+
+
+require(knitr)
+kable(occ_with_deg, caption = "The number of occurances for degrees of injuries in each Occupation")
+
+```
+
+
+## Graphical Representation of Occupations and Associated Degrees of Accidental Injuries
+
+Using the subset created, I now have an accidents data frame that includes information on the degrees of each injury, and what occupation the worker is who experienced the accident. I decided to create a bar plot in order to depict the correlation between occupation category and number of injuries, while using color to show what degree of injury the accident was. I chose to flip the bar plot so that more space could be used to fill the occupation names, and it looked more aesthetically pleasing. 
+
+
+```{r}
+
+#Create factors for the plot
+a_occupations$Deg <- factor(a_occupations$Deg, levels = c("Non - Hospital Injuries", "Hospital Injuries", "Fatalities"))
+
+#ggplot geometric bar plot with a_occupations data, Occupation on the x axis and changing colors based on the degree of injury
+
+p <- ggplot(data = a_occupations, aes(x = Occupation, fill = factor(Deg))) 
+p <- p + geom_bar() + coord_flip() + scale_fill_brewer(palette = 2) 
+p <- p+ labs(fill = "Degree of Injury") + theme(legend.justification=c(1,0), legend.position=c(1,0)) 
+p + ggtitle("Occupations and Accident Occurances") 
+
+```
+
+
+##OSHA Violations
+Next, I looked into the inspections OSHA conducts on workplaces. I chose to only focus on the inspection types labeled "A" and "B", representing catastrophes/fatalities and complaints, respectively. These appeared to be the only ones representing potential dangers in the workplace, as fatalities and catastrophes are a clear indication of a dangerous workplace, while complaints indicate concerns from the employees that make them feel uncomfortable and/or in danger. 
+
+```{r}
+
+osha <- read.dbf("osha.DBF")
+
+sic <- read.dbf("lookups/sic.dbf")
+
+#clean out unnecessary columns 
+cleanosha <- osha %>% select(c(SIC, TOTALVIOLS, INSPTYPE))
+
+#find what SIC codes actually mean
+cleanosha <- left_join(cleanosha, sic, by="SIC")
+cleanosha <- cleanosha %>% select(-c(SIC))
+
+cleanosha$INSPTYPE <- as.character(cleanosha$INSPTYPE)
+
+#only want places with violations to demonstrate workplaces
+#that have bad workplace environment
+cleanosha <- subset(cleanosha, TOTALVIOLS > 0)
+
+#distinguish two types of inspections
+fatcat <- filter(cleanosha, INSPTYPE == "A")
+complaint <- filter(cleanosha, INSPTYPE == "B")
+
+#ddply function will add up the violation total occurances for all the same industries on each data frame
+fatcat <- ddply(fatcat,"INDUSTRY",numcolwise(sum))
+complaint <- ddply(complaint,"INDUSTRY",numcolwise(sum))
+
+#order both data frames with the most total violations
+fatcat <-  fatcat [with(fatcat , order(-TOTALVIOLS)), ]
+complaint <-  complaint [with(complaint , order(-TOTALVIOLS)), ]
+fatcat <- setNames(fatcat, c("Industry","Total Violations"))
+complaint <- setNames(complaint, c("Industry","Total Violations"))
+
+
+#apply tables 
+kable(head(fatcat,20), caption = "The 20 industries with the most fatalities/catastrophes")
+kable(head(complaint,20), caption = "The 20 industries with the most OSHA violations")
+
+fatcat <- setNames(fatcat, c("Industry","Total Violations"))
+complaint <- setNames(complaint, c("Industry","Total Violations"))
+
+
+
+```
